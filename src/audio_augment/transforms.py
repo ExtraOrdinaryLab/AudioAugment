@@ -1,7 +1,13 @@
 import random
+from typing import Optional, Union, List
 
+import torch
 import librosa
 import numpy as np
+import torch.nn as nn
+import torchaudio.compliance.kaldi as ta_kaldi
+
+from audio_augment.utils import to_numpy, to_tensor
 
 
 def reshape_audio_clip(waveform: np.ndarray) -> np.ndarray:
@@ -25,6 +31,24 @@ def reshape_audio_clip(waveform: np.ndarray) -> np.ndarray:
         return waveform.reshape((1, -1))
     else:
         raise ValueError("`waveform` must have either 1 or 2 dimensions.")
+
+
+class RandomCrop(object):
+
+    supports_multichannel = True
+
+    def __init__(self, crop_length: float, sample_rate: int = 16000):
+        assert crop_length > 0.0, ValueError("`max_length` must be greater than zero.")
+        self.crop_length = crop_length
+        self.sample_rate = sample_rate
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data)
+        # The audio clip is shorter than the crop length
+        if audio_data.shape[-1] <= int(self.crop_length * self.sample_rate):
+            return audio_data
+        offset = random.randint(0, audio_data.shape[-1] - self.crop_length * self.sample_rate)
+        return audio_data[:, offset:offset + int(self.crop_length * self.sample_rate)]
 
 
 class AddWhiteNoise(object):
@@ -156,6 +180,67 @@ class RandomGain(object):
         return f"{self.__class__.__name__}(min_gain_db={self.min_gain_db}, max_gain_db={self.max_gain_db})"
 
 
+class FBank(object):
+
+    supports_multichannel = False
+
+    def __init__(
+        self, 
+        sampling_rate: int = 16000, 
+        num_mel_bins: int = 128, 
+        max_frame_length: int = 1024, 
+        frame_length: float = 25,
+        frame_shift: float = 10,
+    ):
+        self.sampling_rate = sampling_rate
+        self.num_mel_bins = num_mel_bins
+        self.max_frame_length = max_frame_length
+        self.frame_length = frame_length
+        self.frame_shift = frame_shift
+
+    @staticmethod
+    def _extract_fbank(
+        waveform: np.ndarray, 
+        sampling_rate: int = 16000, 
+        max_frame_length: int = 1024, 
+        num_mel_bins: int = 128, 
+        frame_length: float = 25,
+        frame_shift: float = 10,
+    ) -> np.ndarray:
+        waveform = to_tensor(waveform, device='cpu').float()
+        fbank = ta_kaldi.fbank(
+            waveform,
+            sample_frequency=sampling_rate,
+            window_type="hanning",
+            num_mel_bins=num_mel_bins,
+            frame_length=frame_length, 
+            frame_shift=frame_shift, 
+        )
+        num_frames = fbank.shape[0]
+        difference = max_frame_length - num_frames
+        
+        if difference > 0:
+            pad_module = nn.ZeroPad2d((0, 0, 0, difference))
+            fbank = pad_module(fbank)
+        elif difference < 0:
+            fbank = fbank[0:max_frame_length, :]
+
+        fbank = fbank.numpy() # (num_frames, num_mel_bins)
+        return fbank
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data)
+        fbank = self._extract_fbank(
+            audio_data, 
+            sampling_rate=self.sampling_rate, 
+            max_frame_length=self.max_frame_length, 
+            num_mel_bins=self.num_mel_bins, 
+            frame_length=self.frame_length, 
+            frame_shift=self.frame_shift
+        )
+        return fbank
+    
+
 class RandomApply(object):
     """
     Applies a list of transformations randomly with a given probability.
@@ -205,7 +290,21 @@ class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
     
-    def __call__(self, audio_data):
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
         for t in self.transforms:
             audio_data = t(audio_data)
         return audio_data
+
+
+class ToOneHot(object):
+
+    def __init__(self, num_classes: int):
+        self.num_classes = num_classes
+
+    def _one_hot_transform(self, labels: List[int], num_classes: int) -> np.ndarray:
+        one_hot_tensor = np.zeros((num_classes, ), dtype=float)
+        one_hot_tensor[labels] = 1
+        return one_hot_tensor
+
+    def __call__(self, labels):
+        return self._one_hot_transform(labels, self.num_classes)
