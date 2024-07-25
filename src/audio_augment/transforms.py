@@ -7,6 +7,7 @@ import torchaudio
 import numpy as np
 import torch.nn as nn
 import torchaudio.compliance.kaldi as ta_kaldi
+from augment import EffectChain as WavAugmentEffectChain
 
 from audio_augment.utils import to_numpy, to_tensor
 
@@ -179,6 +180,49 @@ class RandomGain(object):
     
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(min_gain_db={self.min_gain_db}, max_gain_db={self.max_gain_db})"
+
+
+class Reverb(object):
+
+    def __init__(
+        self, 
+        sample_rate: int = 16000, 
+        reverberance_min: int = 0, 
+        reverberance_max: int = 100, 
+        dumping_factor_min: int = 0, 
+        dumping_factor_max: int = 100, 
+        room_size_min: int = 0, 
+        room_size_max: int = 100, 
+    ):
+        self.sample_rate = sample_rate
+        self.reverberance_min = reverberance_min
+        self.reverberance_max = reverberance_max
+        self.dumping_factor_min = dumping_factor_min
+        self.dumping_factor_max = dumping_factor_max
+        self.room_size_min = room_size_min
+        self.room_size_max = room_size_max
+
+        self.source_info = {'rate': self.sample_rate}
+        self.target_info = {'channel': 1, 'rate': self.sample_rate}
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data)
+        reverberance = random.randint(self.reverberance_min, self.reverberance_max)
+        dumping_factor = random.randint(self.dumping_factor_min, self.dumping_factor_max)
+        room_size = random.randint(self.room_size_min, self.room_size_max)
+        num_channels = audio_data.shape[0]
+        effect_chain = (
+            WavAugmentEffectChain()
+            .reverb(reverberance, dumping_factor, room_size)
+            .channels(num_channels)
+        )
+        aug_signal = effect_chain.apply(
+            to_tensor(audio_data, device='cpu').to(torch.float32), 
+            src_info={'rate': self.sample_rate}, 
+            target_info={'channel': num_channels, 'rate': self.sample_rate}
+        )
+        aug_signal = to_numpy(aug_signal)
+        return aug_signal
 
 
 class FBank(object):
