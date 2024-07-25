@@ -1,8 +1,9 @@
 import random
-from typing import Optional, Union, List
+from typing import Sequence, Union, List, Callable
 
 import torch
 import librosa
+import torchaudio
 import numpy as np
 import torch.nn as nn
 import torchaudio.compliance.kaldi as ta_kaldi
@@ -241,6 +242,50 @@ class FBank(object):
         return fbank
     
 
+class SpecAugment(object):
+
+    supports_multichannel = False
+
+    def __init__(
+        self, 
+        freq_mask_param: int = 48, 
+        time_mask_param: int = 192, 
+    ):
+        self.time_mask_param = time_mask_param
+        self.freq_mask_param = freq_mask_param
+
+    def __call__(self, fbank: np.ndarray) -> np.ndarray:
+        """
+        fbank : np.ndarray
+            Spectrogram of shape (num_frames, num_mel_bins)
+        """
+        fbank = to_tensor(fbank, device='cpu')
+        if self.freq_mask_param != 0:
+            freqm = torchaudio.transforms.FrequencyMasking(self.freq_mask_param)
+            fbank = freqm(fbank.transpose(0, 1).unsqueeze(0))
+            fbank = fbank.squeeze(0).transpose(0, 1)
+        if self.time_mask_param != 0:
+            timem = torchaudio.transforms.TimeMasking(self.time_mask_param)
+            fbank = timem(fbank.transpose(0, 1).unsqueeze(0))
+            fbank = fbank.squeeze(0).transpose(0, 1)
+        fbank = to_numpy(fbank)
+        return fbank
+
+
+class Normalize(object):
+
+    def __init__(
+        self, 
+        mean: float = -4.2677393, 
+        std: float = 4.5689974, 
+    ):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, input_values: np.ndarray) -> np.ndarray:
+        return (input_values - (self.mean)) / (self.std * 2)
+
+
 class RandomApply(object):
     """
     Applies a list of transformations randomly with a given probability.
@@ -294,6 +339,21 @@ class Compose(object):
         for t in self.transforms:
             audio_data = t(audio_data)
         return audio_data
+
+
+class MultiViewTransform(object):
+    """Transforms an image into multiple views.
+
+    Args:
+        transforms:
+            A sequence of transforms. Every transform creates a new view.
+
+    """
+    def __init__(self, transforms: Sequence[Callable]):
+        self.transforms = transforms
+
+    def __call__(self, input_values: Union[torch.Tensor, np.ndarray]) -> Union[List[torch.Tensor], List[np.ndarray]]:
+        return [transform(input_values) for transform in self.transforms]
 
 
 class ToOneHot(object):
