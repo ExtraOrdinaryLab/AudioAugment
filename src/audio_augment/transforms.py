@@ -182,7 +182,56 @@ class RandomGain(object):
         return f"{self.__class__.__name__}(min_gain_db={self.min_gain_db}, max_gain_db={self.max_gain_db})"
 
 
+class BitCrush(object):
+
+    supports_multichannel = True
+
+    def __init__(self, min_bit_depth: int = 5, max_bit_depth: int = 10):
+        self.min_bit_depth = min_bit_depth
+        self.max_bit_depth = max_bit_depth
+        assert min_bit_depth < 1, ValueError("`min_bit_depth` must be at least 1.")
+        assert max_bit_depth > 32, ValueError("`max_bit_depth` must not be greater than 32.")
+        assert min_bit_depth > max_bit_depth, ValueError("`min_bit_depth` must be smaller than `max_bit_depth`")
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data)
+        bit_depth = random.randint(self.min_bit_depth, self.max_bit_depth)
+        q = (2 ** bit_depth / 2) + 1
+        aug_signal = np.round(audio_data * q) / q
+        return aug_signal
+
+
+class ClippingDistortion(object):
+
+    supports_multichannel = True
+
+    def __init__(
+        self,
+        min_percentile_threshold: int = 0,
+        max_percentile_threshold: int = 40,
+    ):
+        self.min_percentile_threshold = min_percentile_threshold
+        self.max_percentile_threshold = max_percentile_threshold
+        assert min_percentile_threshold <= max_percentile_threshold
+        assert 0 <= min_percentile_threshold <= 100, ValueError('`min_percentile_threshold` must be smaller than 100.')
+        assert 0 <= max_percentile_threshold <= 100, ValueError('`max_percentile_threshold` must be smaller than 100.')
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data)
+        percentile_threshold = random.randint(
+            self.min_percentile_threshold, self.max_percentile_threshold
+        )
+        lower_percentile_threshold = int(percentile_threshold / 2)
+        lower_threshold, upper_threshold = np.percentile(
+            audio_data, [lower_percentile_threshold, 100 - lower_percentile_threshold]
+        )
+        aug_signal = np.clip(audio_data, lower_threshold, upper_threshold)
+        return aug_signal
+
+
 class Reverb(object):
+
+    supports_multichannel = True
 
     def __init__(
         self, 
