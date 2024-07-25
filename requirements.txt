@@ -1,3 +1,4 @@
 librosa==0.10.2.post1
 numpy==1.26.4
 scipy==1.13.1
+git+https://github.com/facebookresearch/WavAugment.git
