@@ -11,6 +11,12 @@ from augment import EffectChain as WavAugmentEffectChain
 
 from audio_augment.utils import to_numpy, to_tensor
 
+__all__ = [
+    'RandomCrop', 'AddWhiteNoise', 'TimeStretch', 'PitchShift', 'PolarityInversion', 
+    'RandomGain', 'BitCrush', 'ClippingDistortion', 'Reverb', 'FBank', 
+    'SpecAugment', 'Normalize'
+]
+
 
 def reshape_audio_clip(waveform: np.ndarray) -> np.ndarray:
     """
@@ -189,9 +195,9 @@ class BitCrush(object):
     def __init__(self, min_bit_depth: int = 5, max_bit_depth: int = 10):
         self.min_bit_depth = min_bit_depth
         self.max_bit_depth = max_bit_depth
-        assert min_bit_depth < 1, ValueError("`min_bit_depth` must be at least 1.")
-        assert max_bit_depth > 32, ValueError("`max_bit_depth` must not be greater than 32.")
-        assert min_bit_depth > max_bit_depth, ValueError("`min_bit_depth` must be smaller than `max_bit_depth`")
+        assert min_bit_depth >= 1, ValueError("`min_bit_depth` must be at least 1.")
+        assert max_bit_depth <= 32, ValueError("`max_bit_depth` must not be greater than 32.")
+        assert min_bit_depth < max_bit_depth, ValueError("`min_bit_depth` must be smaller than `max_bit_depth`")
 
     def __call__(self, audio_data: np.ndarray) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
