@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 setup(
     name='audio_augment', 
-    version='0.0.4', 
+    version='0.0.5', 
     description='Open-source library of AudioAugment', 
     author='Yang Wang', 
     author_email='yangwang4work@gmail.com', 

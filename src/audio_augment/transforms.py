@@ -3,6 +3,7 @@ from typing import Sequence, Union, List, Callable
 
 import torch
 import librosa
+import numpy_rms
 import torchaudio
 import numpy as np
 import torch.nn as nn
@@ -14,7 +15,7 @@ from audio_augment.utils import to_numpy, to_tensor
 __all__ = [
     'RandomCrop', 'AddWhiteNoise', 'TimeStretch', 'PitchShift', 'PolarityInversion', 
     'RandomGain', 'BitCrush', 'ClippingDistortion', 'Reverb', 'FBank', 
-    'SpecAugment', 'Normalize'
+    'SpecAugment', 'Normalize', 'TanhDistortion'
 ]
 
 
@@ -277,6 +278,42 @@ class Reverb(object):
             target_info={'channel': num_channels, 'rate': self.sample_rate}
         )
         aug_signal = to_numpy(aug_signal)
+        return aug_signal
+
+
+class TanhDistortion(object):
+
+    supports_multichannel = True
+
+    def __init__(
+        self, min_distortion: float = 0.01, max_distortion: float = 0.7
+    ):
+        assert 0 <= min_distortion <= 1
+        assert 0 <= max_distortion <= 1
+        assert min_distortion <= max_distortion
+        self.min_distortion = min_distortion
+        self.max_distortion = max_distortion
+
+    @staticmethod
+    def calculate_rms(samples):
+        """Given a numpy array of audio samples, return its Root Mean Square (RMS)."""
+        return np.mean(numpy_rms.rms(samples))
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data)
+        distortion_amount = random.uniform(
+            self.min_distortion, self.max_distortion
+        )
+        percentile = 100 - 99 * distortion_amount
+        threshold = np.percentile(np.abs(audio_data), percentile)
+        gain_factor = 0.5 / (threshold + 1e-6)
+        aug_signal = np.tanh(gain_factor * audio_data)
+        # Scale the output so its loudness matches the input
+        rms_before = self.calculate_rms(audio_data)
+        if rms_before > 1e-9:
+            rms_after = self.calculate_rms(aug_signal)
+            post_gain = rms_before / rms_after
+            aug_signal = post_gain * aug_signal
         return aug_signal
 
 
