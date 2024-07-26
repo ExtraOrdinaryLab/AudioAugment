@@ -59,6 +59,9 @@ class RandomCrop(object):
         offset = random.randint(0, audio_data.shape[-1] - self.crop_length * self.sample_rate)
         return audio_data[:, offset:offset + int(self.crop_length * self.sample_rate)]
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(crop_length={self.crop_length}, sample_rate={self.sample_rate})"
+
 
 class AddWhiteNoise(object):
 
@@ -207,6 +210,9 @@ class BitCrush(object):
         aug_signal = np.round(audio_data * q) / q
         return aug_signal
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(min_bit_depth={self.min_bit_depth}, max_bit_depth={self.max_bit_depth})"
+
 
 class ClippingDistortion(object):
 
@@ -234,6 +240,13 @@ class ClippingDistortion(object):
         )
         aug_signal = np.clip(audio_data, lower_threshold, upper_threshold)
         return aug_signal
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"min_percentile_threshold={self.min_percentile_threshold}, "
+            f"max_percentile_threshold={self.max_percentile_threshold})"
+        )
 
 
 class Reverb(object):
@@ -280,6 +293,18 @@ class Reverb(object):
         aug_signal = to_numpy(aug_signal)
         return aug_signal
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"sample_rate={self.sample_rate}, "
+            f"reverberance_min={self.reverberance_min}, "
+            f"reverberance_max={self.reverberance_max}, "
+            f"dumping_factor_min={self.dumping_factor_min}, "
+            f"dumping_factor_max={self.dumping_factor_max}, "
+            f"room_size_min={self.room_size_min}, "
+            f"room_size_max={self.room_size_max})"
+        )
+
 
 class TanhDistortion(object):
 
@@ -315,6 +340,13 @@ class TanhDistortion(object):
             post_gain = rms_before / rms_after
             aug_signal = post_gain * aug_signal
         return aug_signal
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"min_distortion={self.min_distortion}, "
+            f"max_distortion={self.max_distortion})"
+        )
 
 
 class FBank(object):
@@ -376,6 +408,16 @@ class FBank(object):
             frame_shift=self.frame_shift
         )
         return fbank
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"sampling_rate={self.sampling_rate}, "
+            f"num_mel_bins={self.num_mel_bins}, "
+            f"max_frame_length={self.max_frame_length}, "
+            f"frame_length={self.frame_length}, "
+            f"frame_shift={self.frame_shift})"
+        )
     
 
 class SpecAugment(object):
@@ -407,6 +449,13 @@ class SpecAugment(object):
         fbank = to_numpy(fbank)
         return fbank
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"freq_mask_param={self.freq_mask_param}, "
+            f"time_mask_param={self.time_mask_param})"
+        )
+
 
 class Normalize(object):
 
@@ -420,6 +469,13 @@ class Normalize(object):
 
     def __call__(self, input_values: np.ndarray) -> np.ndarray:
         return (input_values - (self.mean)) / (self.std * 2)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"mean={self.mean}, "
+            f"std={self.std})"
+        )
 
 
 class RandomApply(object):
@@ -444,6 +500,13 @@ class RandomApply(object):
             audio_data = t(audio_data)
         return audio_data
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"transforms={self.transforms}, "
+            f"p={self.p})"
+        )
+
 
 class RandomOrderCompose(object):
     """
@@ -465,6 +528,9 @@ class RandomOrderCompose(object):
             audio_data = self.transforms[idx](audio_data)
         return audio_data
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.transforms})"
+
 
 class Compose(object):
 
@@ -475,6 +541,9 @@ class Compose(object):
         for t in self.transforms:
             audio_data = t(audio_data)
         return audio_data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.transforms})"
 
 
 class MultiViewTransform(object):
@@ -491,6 +560,9 @@ class MultiViewTransform(object):
     def __call__(self, input_values: Union[torch.Tensor, np.ndarray]) -> Union[List[torch.Tensor], List[np.ndarray]]:
         return [transform(input_values) for transform in self.transforms]
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.transforms})"
+
 
 class ToOneHot(object):
 
@@ -504,3 +576,6 @@ class ToOneHot(object):
 
     def __call__(self, labels):
         return self._one_hot_transform(labels, self.num_classes)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.num_classes})"
