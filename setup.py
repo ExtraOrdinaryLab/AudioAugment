@@ -18,7 +18,7 @@ dependency_links = [req for req in requirements if req.startswith('git+')]
 
 setup(
     name='audio_augment', 
-    version='0.0.7', 
+    version='0.0.8', 
     description='Open-source library of AudioAugment', 
     author='Yang Wang', 
     author_email='yangwang4work@gmail.com', 

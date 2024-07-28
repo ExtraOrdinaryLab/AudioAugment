@@ -12,10 +12,18 @@ from augment import EffectChain as WavAugmentEffectChain
 
 from audio_augment.utils import to_numpy, to_tensor
 
+__1d_transforms__ = [
+    'RandomCrop', 'AddWhiteNoise', 'TimeStretch', 'PitchShift', 'PolarityInversion', 
+    'RandomGain', 'BitCrush', 'ClippingDistortion', 'Reverb', 'Normalize', 
+    'TanhDistortion'
+]
+__2d_transforms__ = [
+    'SpecAugment', 'FBank', 'CutOut'
+]
 __all__ = [
     'RandomCrop', 'AddWhiteNoise', 'TimeStretch', 'PitchShift', 'PolarityInversion', 
     'RandomGain', 'BitCrush', 'ClippingDistortion', 'Reverb', 'FBank', 
-    'SpecAugment', 'Normalize', 'TanhDistortion'
+    'SpecAugment', 'Normalize', 'TanhDistortion', 'CutOut'
 ]
 
 
@@ -455,6 +463,37 @@ class SpecAugment(object):
             f"freq_mask_param={self.freq_mask_param}, "
             f"time_mask_param={self.time_mask_param})"
         )
+
+
+class CutOut(object):
+
+    def __init__(self, num_holes, length):
+        self.num_holes = num_holes
+        self.length = length
+
+    def __call__(self, input_values: np.ndarray) -> np.ndarray:
+        """
+        input_values : np.ndarray
+            Tensor input shape (num_frames, num_mel_bins)
+        """
+        assert input_values.ndim == 2
+        h, w = input_values.shape
+        mask = np.ones((h, w), np.float32)
+
+        for n in range(self.num_holes):
+            y = np.random.randint(h)
+            x = np.random.randint(w)
+            
+            y1 = np.clip(y - self.length // 2, 0, h)
+            y2 = np.clip(y + self.length // 2, 0, h)
+            x1 = np.clip(x - self.length // 2, 0, w)
+            x2 = np.clip(x + self.length // 2, 0, w)
+            
+            mask[y1: y2, x1: x2] = 0.0
+        
+        input_values = input_values * mask
+
+        return input_values
 
 
 class Normalize(object):
