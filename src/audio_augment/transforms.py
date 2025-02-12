@@ -1,11 +1,14 @@
 import random
 from typing import Sequence, Union, List, Callable
 
-import torch
 import librosa
 import numpy_rms
-import torchaudio
+import scipy.signal
 import numpy as np
+import soundfile as sf
+
+import torch
+import torchaudio
 import torch.nn as nn
 import torchaudio.compliance.kaldi as ta_kaldi
 from augment import EffectChain as WavAugmentEffectChain
@@ -91,6 +94,125 @@ class AddWhiteNoise(object):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(min_amplitude={self.min_amplitude}, max_amplitude={self.max_amplitude})"
+
+
+class AddNoiseFromFiles(object):
+
+    supports_multichannel = False
+
+    def __init__(self, noise_files, snr_low: int = 0, snr_high: int = 10, sample_rate: int = 16000, normalize: bool = False):
+        self.noise_files = noise_files
+        self.snr_low = snr_low
+        self.snr_high = snr_high
+        self.sample_rate = sample_rate
+        self.normalize = normalize
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}"
+            f"(snr_low={self.snr_low}, "
+            f"snr_high={self.snr_high}, "
+            f"sample_rate={self.sample_rate}, "
+            f"normalize={self.normalize})"
+        )
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data) # (1, T)
+
+        noise_path = random.choice(self.noise_files)
+        noise, noise_sr = sf.read(noise_path, dtype='float32')
+
+        if noise_sr!= self.sample_rate:
+            noise = librosa.resample(noise, orig_sr=noise_sr, target_sr=self.sample_rate)
+
+        # Ensure noise is at least as long as the waveform
+        T = audio_data.shape[1]
+        if len(noise) < T:
+            repeat_factor = int(np.ceil(T / len(noise)))
+            noise = np.tile(noise, repeat_factor)[:T]
+        else:
+            start_idx = random.randint(0, len(noise) - T)
+            noise = noise[start_idx:start_idx + T]
+
+        # Compute signal and noise power
+        signal_power = np.mean(audio_data ** 2)
+        noise_power = np.mean(noise ** 2)
+
+        # Randomly select an SNR level
+        snr_db = random.uniform(self.snr_low, self.snr_high)
+        snr = 10 ** (snr_db / 10)
+        noise = noise * np.sqrt(signal_power / (noise_power * snr))
+
+        # Add noise to signal
+        noisy_waveform = audio_data + reshape_audio_clip(noise)
+
+        # Normalize if required
+        if self.normalize:
+            max_val = np.max(np.abs(noisy_waveform))
+            if max_val > 1:
+                noisy_waveform /= max_val
+
+        return noisy_waveform
+
+
+class AddReverbFromFiles(object):
+    """This class convolves an audio signal with an impulse response from a list of files.
+
+    Arguments
+    ---------
+    rir_files : list
+        List of paths to impulse response audio files.
+    rir_scale_factor : float
+        Scaling factor for the impulse response duration.
+        If 0 < scale_factor < 1, the impulse response is compressed
+        (less reverb), while if scale_factor > 1 it is dilated
+        (more reverb).
+    """
+
+    supports_multichannel = False
+
+    def __init__(self, rir_files, sample_rate: int = 16000, rir_scale_factor: float = 1.0):
+        self.rir_files = rir_files
+        self.sample_rate = sample_rate
+        self.rir_scale_factor = rir_scale_factor
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}"
+            f"(sample_rate={self.sample_rate}, "
+            f"rir_scale_factor={self.rir_scale_factor})"
+        )
+
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        audio_data = reshape_audio_clip(audio_data)
+
+        # Load a random impulse response file
+        rir_path = random.choice(self.rir_files)
+        rir, rir_sr = sf.read(rir_path, dtype='float32')
+
+        # Convert to mono if necessary
+        if len(rir.shape) > 1:
+            rir = np.mean(rir, axis=1)
+
+        # Resample if necessary
+        if rir_sr != self.sample_rate:
+            rir = librosa.resample(rir, orig_sr=rir_sr, target_sr=self.sample_rate)
+
+        # Scale the RIR if needed
+        if self.rir_scale_factor != 1:
+            num_samples = int(len(rir) * self.rir_scale_factor)
+            rir = scipy.signal.resample(rir, num_samples)
+
+        # Normalize RIR energy
+        rir = rir / np.max(np.abs(rir))
+        
+        # Convolve the input waveform with the RIR
+        reverberated_waveform = scipy.signal.fftconvolve(audio_data, rir[None, :], mode='full')
+        
+        # Truncate to match original length
+        reverberated_waveform = reverberated_waveform[:, :audio_data.shape[1]]
+
+        return reverberated_waveform
 
 
 class TimeStretch(object):
