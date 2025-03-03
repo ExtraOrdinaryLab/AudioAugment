@@ -1,4 +1,5 @@
 import random
+from abc import ABC, abstractmethod
 from typing import Sequence, Union, List, Callable
 
 import librosa
@@ -15,22 +16,8 @@ from augment import EffectChain as WavAugmentEffectChain
 
 from audio_augment.utils import to_numpy, to_tensor
 
-__1d_transforms__ = [
-    'RandomCrop', 'AddWhiteNoise', 'TimeStretch', 'PitchShift', 'PolarityInversion', 
-    'RandomGain', 'BitCrush', 'ClippingDistortion', 'Reverb', 'Normalize', 
-    'TanhDistortion'
-]
-__2d_transforms__ = [
-    'SpecAugment', 'FBank', 'CutOut'
-]
-__all__ = [
-    'RandomCrop', 'AddWhiteNoise', 'TimeStretch', 'PitchShift', 'PolarityInversion', 
-    'RandomGain', 'BitCrush', 'ClippingDistortion', 'Reverb', 'FBank', 
-    'SpecAugment', 'Normalize', 'TanhDistortion', 'CutOut'
-]
 
-
-def reshape_audio_clip(waveform: np.ndarray) -> np.ndarray:
+def reshape_audio_clip(waveform: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
     """
     Reshape the input ndarray representing an audio clip waveform to [num_channels, num_samples].
     
@@ -40,6 +27,8 @@ def reshape_audio_clip(waveform: np.ndarray) -> np.ndarray:
     Returns:
         ndarray: Reshaped audio clip waveform.
     """
+    waveform = to_numpy(waveform)
+
     if not isinstance(waveform, np.ndarray):
         raise ValueError("`waveform` must be a numpy array.")
 
@@ -53,7 +42,29 @@ def reshape_audio_clip(waveform: np.ndarray) -> np.ndarray:
         raise ValueError("`waveform` must have either 1 or 2 dimensions.")
 
 
-class RandomCrop(object):
+class DefaultReprMixin:
+    """
+    Mixin that provides an automatic __repr__ using the instance's __dict__.
+    """
+    def __repr__(self) -> str:
+        classname = self.__class__.__name__
+        params = ", ".join(f"{k}={v}" for k, v in self.__dict__.items())
+        return f"{classname}({params})"
+
+
+class AudioTransform(ABC, DefaultReprMixin):
+    """
+    Abstract base class for audio transforms that should have a uniform interface.
+    Classes inheriting from AudioTransform must implement __call__.
+    """
+    supports_multichannel: bool = True
+
+    @abstractmethod
+    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+        pass
+
+
+class RandomCrop(AudioTransform):
 
     supports_multichannel = True
 
@@ -62,7 +73,7 @@ class RandomCrop(object):
         self.crop_length = crop_length
         self.sample_rate = sample_rate
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         # The audio clip is shorter than the crop length
         if audio_data.shape[-1] <= int(self.crop_length * self.sample_rate):
@@ -70,11 +81,8 @@ class RandomCrop(object):
         offset = random.randint(0, audio_data.shape[-1] - self.crop_length * self.sample_rate)
         return audio_data[:, offset:offset + int(self.crop_length * self.sample_rate)]
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(crop_length={self.crop_length}, sample_rate={self.sample_rate})"
 
-
-class AddWhiteNoise(object):
+class AddWhiteNoise(AudioTransform):
 
     supports_multichannel = True
 
@@ -85,18 +93,15 @@ class AddWhiteNoise(object):
         self.min_amplitude = min_amplitude
         self.max_amplitude = max_amplitude
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         amplitude = random.uniform(self.min_amplitude, self.max_amplitude)
         noise = np.random.normal(0, audio_data.std(), size=audio_data.shape)
         aug_signal = audio_data + noise * amplitude
         return aug_signal
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(min_amplitude={self.min_amplitude}, max_amplitude={self.max_amplitude})"
 
-
-class AddNoiseFromFiles(object):
+class AddNoiseFromFiles(AudioTransform):
 
     supports_multichannel = False
 
@@ -107,16 +112,7 @@ class AddNoiseFromFiles(object):
         self.sample_rate = sample_rate
         self.normalize = normalize
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}"
-            f"(snr_low={self.snr_low}, "
-            f"snr_high={self.snr_high}, "
-            f"sample_rate={self.sample_rate}, "
-            f"normalize={self.normalize})"
-        )
-
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data) # (1, T)
 
         noise_path = random.choice(self.noise_files)
@@ -154,8 +150,13 @@ class AddNoiseFromFiles(object):
 
         return noisy_waveform
 
+    def __repr__(self) -> str:
+        classname = self.__class__.__name__
+        params = ", ".join(f"{k}={v}" for k, v in self.__dict__.items() if k != 'noise_files')
+        return f"{classname}({params})"
 
-class AddReverbFromFiles(object):
+
+class AddReverbFromFiles(AudioTransform):
     """This class convolves an audio signal with an impulse response from a list of files.
 
     Arguments
@@ -177,13 +178,11 @@ class AddReverbFromFiles(object):
         self.rir_scale_factor = rir_scale_factor
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}"
-            f"(sample_rate={self.sample_rate}, "
-            f"rir_scale_factor={self.rir_scale_factor})"
-        )
+        classname = self.__class__.__name__
+        params = ", ".join(f"{k}={v}" for k, v in self.__dict__.items() if k != 'rir_files')
+        return f"{classname}({params})"
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
 
         # Load a random impulse response file
@@ -215,7 +214,7 @@ class AddReverbFromFiles(object):
         return reverberated_waveform
 
 
-class TimeStretch(object):
+class TimeStretch(AudioTransform):
     """
     Stretch factor. If rate > 1, then the signal is sped up. If rate < 1, then the signal is slowed down.
     """
@@ -230,27 +229,20 @@ class TimeStretch(object):
         self.max_rate = max_rate
         self.leave_length_unchanged = leave_length_unchanged
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         stretch_factor = random.uniform(self.min_rate, self.max_rate)
         aug_signal = librosa.effects.time_stretch(audio_data, rate=stretch_factor)
         if self.leave_length_unchanged:
-            padded_samples = np.zeros(shape=aug_signal.shape, dtype=aug_signal.dtype)
+            padded_samples = np.zeros(shape=audio_data.shape, dtype=audio_data.dtype)
             window = aug_signal[..., :aug_signal.shape[-1]]
             actual_window_length = window.shape[-1]  # may be smaller than samples.shape[-1]
             padded_samples[..., :actual_window_length] = window
             aug_signal = padded_samples
         return aug_signal
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(min_rate={self.min_rate}, "
-            f"max_rate={self.max_rate}, "
-            f"leave_length_unchanged={self.leave_length_unchanged})"
-        )
 
-
-class PitchShift(object):
+class PitchShift(AudioTransform):
     """Pitch shift the sound up or down without changing the tempo"""
 
     supports_multichannel = True
@@ -263,7 +255,7 @@ class PitchShift(object):
         self.min_semitones = min_semitones
         self.max_semitones = max_semitones
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         num_semitones = random.uniform(self.min_semitones, self.max_semitones)
         aug_signal = librosa.effects.pitch_shift(
@@ -271,29 +263,19 @@ class PitchShift(object):
         )
         return aug_signal
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}(sample_rate={self.sample_rate}, "
-            f"min_semitones={self.min_semitones}, "
-            f"max_semitones={self.max_semitones})"
-        )
 
-
-class PolarityInversion(object):
+class PolarityInversion(AudioTransform):
     """Flip the audio samples upside-down, reversing their polarity"""
 
     supports_multichannel = True
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         aug_signal = np.negative(audio_data)
         return aug_signal
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}"
 
-
-class RandomGain(object):
+class RandomGain(AudioTransform):
     """Multiply the audio by a random amplitude factor to reduce or increase the volume"""
 
     supports_multichannel = True
@@ -307,7 +289,7 @@ class RandomGain(object):
         if self.max_gain_db is None:
             self.max_gain_db = 12.0
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         gain_db = np.random.uniform(self.min_gain_db, self.max_gain_db)
         amplitude_ratio = self.convert_decibels_to_amplitude_ratio(gain_db)
@@ -317,12 +299,9 @@ class RandomGain(object):
     @staticmethod
     def convert_decibels_to_amplitude_ratio(decibels):
         return 10 ** (decibels / 20)
-    
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(min_gain_db={self.min_gain_db}, max_gain_db={self.max_gain_db})"
 
 
-class BitCrush(object):
+class BitCrush(AudioTransform):
 
     supports_multichannel = True
 
@@ -333,18 +312,15 @@ class BitCrush(object):
         assert max_bit_depth <= 32, ValueError("`max_bit_depth` must not be greater than 32.")
         assert min_bit_depth < max_bit_depth, ValueError("`min_bit_depth` must be smaller than `max_bit_depth`")
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         bit_depth = random.randint(self.min_bit_depth, self.max_bit_depth)
         q = (2 ** bit_depth / 2) + 1
         aug_signal = np.round(audio_data * q) / q
         return aug_signal
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(min_bit_depth={self.min_bit_depth}, max_bit_depth={self.max_bit_depth})"
 
-
-class ClippingDistortion(object):
+class ClippingDistortion(AudioTransform):
 
     supports_multichannel = True
 
@@ -359,7 +335,7 @@ class ClippingDistortion(object):
         assert 0 <= min_percentile_threshold <= 100, ValueError('`min_percentile_threshold` must be smaller than 100.')
         assert 0 <= max_percentile_threshold <= 100, ValueError('`max_percentile_threshold` must be smaller than 100.')
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         percentile_threshold = random.randint(
             self.min_percentile_threshold, self.max_percentile_threshold
@@ -371,15 +347,8 @@ class ClippingDistortion(object):
         aug_signal = np.clip(audio_data, lower_threshold, upper_threshold)
         return aug_signal
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"min_percentile_threshold={self.min_percentile_threshold}, "
-            f"max_percentile_threshold={self.max_percentile_threshold})"
-        )
 
-
-class Reverb(object):
+class Reverb(AudioTransform):
 
     supports_multichannel = True
 
@@ -404,7 +373,13 @@ class Reverb(object):
         self.source_info = {'rate': self.sample_rate}
         self.target_info = {'channel': 1, 'rate': self.sample_rate}
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __repr__(self) -> str:
+        classname = self.__class__.__name__
+        info = ['source_info', 'target_info']
+        params = ", ".join(f"{k}={v}" for k, v in self.__dict__.items() if k not in info)
+        return f"{classname}({params})"
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         reverberance = random.randint(self.reverberance_min, self.reverberance_max)
         dumping_factor = random.randint(self.dumping_factor_min, self.dumping_factor_max)
@@ -423,20 +398,8 @@ class Reverb(object):
         aug_signal = to_numpy(aug_signal)
         return aug_signal
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"sample_rate={self.sample_rate}, "
-            f"reverberance_min={self.reverberance_min}, "
-            f"reverberance_max={self.reverberance_max}, "
-            f"dumping_factor_min={self.dumping_factor_min}, "
-            f"dumping_factor_max={self.dumping_factor_max}, "
-            f"room_size_min={self.room_size_min}, "
-            f"room_size_max={self.room_size_max})"
-        )
 
-
-class TanhDistortion(object):
+class TanhDistortion(AudioTransform):
 
     supports_multichannel = True
 
@@ -454,7 +417,7 @@ class TanhDistortion(object):
         """Given a numpy array of audio samples, return its Root Mean Square (RMS)."""
         return np.mean(numpy_rms.rms(samples))
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         distortion_amount = random.uniform(
             self.min_distortion, self.max_distortion
@@ -471,15 +434,8 @@ class TanhDistortion(object):
             aug_signal = post_gain * aug_signal
         return aug_signal
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"min_distortion={self.min_distortion}, "
-            f"max_distortion={self.max_distortion})"
-        )
 
-
-class FBank(object):
+class FBank(AudioTransform):
 
     supports_multichannel = False
 
@@ -525,9 +481,10 @@ class FBank(object):
             fbank = fbank[0:max_frame_length, :]
 
         fbank = fbank.numpy() # (num_frames, num_mel_bins)
+
         return fbank
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         audio_data = reshape_audio_clip(audio_data)
         fbank = self._extract_fbank(
             audio_data, 
@@ -537,20 +494,11 @@ class FBank(object):
             frame_length=self.frame_length, 
             frame_shift=self.frame_shift
         )
+        assert fbank.shape == (self.max_frame_length, self.num_mel_bins)
         return fbank
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"sampling_rate={self.sampling_rate}, "
-            f"num_mel_bins={self.num_mel_bins}, "
-            f"max_frame_length={self.max_frame_length}, "
-            f"frame_length={self.frame_length}, "
-            f"frame_shift={self.frame_shift})"
-        )
     
 
-class SpecAugment(object):
+class SpecAugment(AudioTransform):
 
     supports_multichannel = False
 
@@ -562,38 +510,32 @@ class SpecAugment(object):
         self.time_mask_param = time_mask_param
         self.freq_mask_param = freq_mask_param
 
-    def __call__(self, fbank: np.ndarray) -> np.ndarray:
+    def __call__(self, input_values: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         """
-        fbank : np.ndarray
+        input_values : np.ndarray
             Spectrogram of shape (num_frames, num_mel_bins)
         """
-        fbank = to_tensor(fbank, device='cpu')
+        assert input_values.ndim == 2
+        input_values = to_tensor(input_values, device='cpu')
         if self.freq_mask_param != 0:
             freqm = torchaudio.transforms.FrequencyMasking(self.freq_mask_param)
-            fbank = freqm(fbank.transpose(0, 1).unsqueeze(0))
-            fbank = fbank.squeeze(0).transpose(0, 1)
+            input_values = freqm(input_values.transpose(0, 1).unsqueeze(0))
+            input_values = input_values.squeeze(0).transpose(0, 1)
         if self.time_mask_param != 0:
             timem = torchaudio.transforms.TimeMasking(self.time_mask_param)
-            fbank = timem(fbank.transpose(0, 1).unsqueeze(0))
-            fbank = fbank.squeeze(0).transpose(0, 1)
-        fbank = to_numpy(fbank)
-        return fbank
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"freq_mask_param={self.freq_mask_param}, "
-            f"time_mask_param={self.time_mask_param})"
-        )
+            input_values = timem(input_values.transpose(0, 1).unsqueeze(0))
+            input_values = input_values.squeeze(0).transpose(0, 1)
+        input_values = to_numpy(input_values)
+        return input_values
 
 
-class CutOut(object):
+class CutOut(AudioTransform):
 
     def __init__(self, num_holes, length):
         self.num_holes = num_holes
         self.length = length
 
-    def __call__(self, input_values: np.ndarray) -> np.ndarray:
+    def __call__(self, input_values: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         """
         input_values : np.ndarray
             Tensor input shape (num_frames, num_mel_bins)
@@ -618,7 +560,7 @@ class CutOut(object):
         return input_values
 
 
-class Normalize(object):
+class Normalize(AudioTransform):
 
     def __init__(
         self, 
@@ -628,15 +570,9 @@ class Normalize(object):
         self.mean = mean
         self.std = std
 
-    def __call__(self, input_values: np.ndarray) -> np.ndarray:
+    def __call__(self, input_values: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        input_values = reshape_audio_clip(input_values)
         return (input_values - (self.mean)) / (self.std * 2)
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"mean={self.mean}, "
-            f"std={self.std})"
-        )
 
 
 class RandomApply(object):
@@ -650,23 +586,35 @@ class RandomApply(object):
     p : float
         The probability of applying any given transformation.
     """
-    def __init__(self, transforms, p: float):
-        self.transforms = transforms
+    def __init__(self, transform, p: float = 1.0):
+        self.transform = transform
         self.p = p
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         if self.p < random.random():
             return audio_data
-        for t in self.transforms:
-            audio_data = t(audio_data)
+        audio_data = self.transform(audio_data)
         return audio_data
 
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"transforms={self.transforms}, "
-            f"p={self.p})"
-        )
+
+class RandomChoiceTransform(object):
+    """
+    Applies a list of transformations randomly with a given probability.
+
+    Parameters
+    ----------
+    transforms : list
+        A list of transformation objects to be applied randomly.
+    p : float
+        The probability of applying any given transformation.
+    """
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        transform = random.choice(self.transforms)
+        audio_data = transform(audio_data)
+        return audio_data
 
 
 class RandomOrderCompose(object):
@@ -682,29 +630,23 @@ class RandomOrderCompose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         order = list(range(len(self.transforms)))
         random.shuffle(order)
         for idx in order:
             audio_data = self.transforms[idx](audio_data)
         return audio_data
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.transforms})"
-
 
 class Compose(object):
 
-    def __init__(self, transforms):
+    def __init__(self, transforms: list):
         self.transforms = transforms
     
-    def __call__(self, audio_data: np.ndarray) -> np.ndarray:
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
         for t in self.transforms:
             audio_data = t(audio_data)
         return audio_data
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.transforms})"
 
 
 class MultiViewTransform(object):
@@ -721,9 +663,6 @@ class MultiViewTransform(object):
     def __call__(self, input_values: Union[torch.Tensor, np.ndarray]) -> Union[List[torch.Tensor], List[np.ndarray]]:
         return [transform(input_values) for transform in self.transforms]
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.transforms})"
-
 
 class ToOneHot(object):
 
@@ -737,6 +676,3 @@ class ToOneHot(object):
 
     def __call__(self, labels):
         return self._one_hot_transform(labels, self.num_classes)
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.num_classes})"
