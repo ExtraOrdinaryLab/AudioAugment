@@ -216,7 +216,11 @@ class AddReverbFromFiles(AudioTransform):
 
 class TimeStretch(AudioTransform):
     """
-    Stretch factor. If rate > 1, then the signal is sped up. If rate < 1, then the signal is slowed down.
+    Time-stretching transform.
+
+    Stretch factor:
+    - If rate > 1, then the signal is sped up (shorter).
+    - If rate < 1, then the signal is slowed down (longer).
     """
 
     supports_multichannel = True
@@ -230,15 +234,24 @@ class TimeStretch(AudioTransform):
         self.leave_length_unchanged = leave_length_unchanged
 
     def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        # Ensure the audio is in the correct shape (this function should handle reshaping)
         audio_data = reshape_audio_clip(audio_data)
         stretch_factor = random.uniform(self.min_rate, self.max_rate)
         aug_signal = librosa.effects.time_stretch(audio_data, rate=stretch_factor)
+
         if self.leave_length_unchanged:
-            padded_samples = np.zeros(shape=audio_data.shape, dtype=audio_data.dtype)
-            window = aug_signal[..., :aug_signal.shape[-1]]
-            actual_window_length = window.shape[-1]  # may be smaller than samples.shape[-1]
-            padded_samples[..., :actual_window_length] = window
-            aug_signal = padded_samples
+            target_length = audio_data.shape[-1]
+            current_length = aug_signal.shape[-1]
+
+            if current_length < target_length:
+                # If the stretched signal is shorter, pad with zeros
+                padded_samples = np.zeros_like(audio_data)
+                padded_samples[..., :current_length] = aug_signal
+                aug_signal = padded_samples
+            elif current_length > target_length:
+                # If the stretched signal is longer, truncate to the target length
+                aug_signal = aug_signal[..., :target_length]
+
         return aug_signal
 
 
