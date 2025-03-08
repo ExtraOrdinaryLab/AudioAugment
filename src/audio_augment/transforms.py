@@ -65,10 +65,19 @@ class AudioTransform(ABC, DefaultReprMixin):
 
 
 class RandomCrop(AudioTransform):
-
+    """
+    Randomly crop an audio clip to a specified length.
+    """
     supports_multichannel = True
 
     def __init__(self, crop_length: float, sample_rate: int = 16000):
+        """
+        Initialize RandomCrop.
+
+        Parameters:
+            crop_length (float): Duration of the crop in seconds.
+            sample_rate (int): Sampling rate of the audio.
+        """
         assert crop_length > 0.0, ValueError("`max_length` must be greater than zero.")
         self.crop_length = crop_length
         self.sample_rate = sample_rate
@@ -83,10 +92,19 @@ class RandomCrop(AudioTransform):
 
 
 class AddWhiteNoise(AudioTransform):
-
+    """
+    Add white noise to an audio clip.
+    """
     supports_multichannel = True
 
     def __init__(self, min_amplitude: float = 0.001, max_amplitude: float = 0.015):
+        """
+        Initialize AddWhiteNoise.
+
+        Parameters:
+            min_amplitude (float): Minimum amplitude of the noise.
+            max_amplitude (float): Maximum amplitude of the noise.
+        """
         assert min_amplitude > 0.0, ValueError("`min_amplitude` must be greater than zero.")
         assert max_amplitude > 0.0, ValueError("`max_amplitude` must be greater than zero.")
         assert max_amplitude >= min_amplitude, ValueError("`max_amplitude` must be greater than `min_amplitude`.")
@@ -102,10 +120,22 @@ class AddWhiteNoise(AudioTransform):
 
 
 class AddNoiseFromFiles(AudioTransform):
-
+    """
+    Add noise from external files to an audio clip at a random Signal-to-Noise Ratio (SNR).
+    """
     supports_multichannel = False
 
     def __init__(self, noise_files, snr_low: int = 0, snr_high: int = 10, sample_rate: int = 16000, normalize: bool = False):
+        """
+        Initialize AddNoiseFromFiles.
+
+        Parameters:
+            noise_files (list): List of paths to noise audio files.
+            snr_low (int): Lower bound for SNR in dB.
+            snr_high (int): Upper bound for SNR in dB.
+            sample_rate (int): Sampling rate of the audio.
+            normalize (bool): Whether to normalize the output audio.
+        """
         self.noise_files = noise_files
         self.snr_low = snr_low
         self.snr_high = snr_high
@@ -157,22 +187,28 @@ class AddNoiseFromFiles(AudioTransform):
 
 
 class AddReverbFromFiles(AudioTransform):
-    """This class convolves an audio signal with an impulse response from a list of files.
+    """
+    Convolve an audio signal with an impulse response from a file to add reverb.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     rir_files : list
         List of paths to impulse response audio files.
     rir_scale_factor : float
-        Scaling factor for the impulse response duration.
-        If 0 < scale_factor < 1, the impulse response is compressed
-        (less reverb), while if scale_factor > 1 it is dilated
-        (more reverb).
+        Scaling factor for the impulse response duration. If 0 < scale_factor < 1, the impulse response
+        is compressed (less reverb), while if scale_factor > 1 it is dilated (more reverb).
     """
-
     supports_multichannel = False
 
     def __init__(self, rir_files, sample_rate: int = 16000, rir_scale_factor: float = 1.0):
+        """
+        Initialize AddReverbFromFiles.
+
+        Parameters:
+            rir_files (list): List of paths to impulse response files.
+            sample_rate (int): Sampling rate of the audio.
+            rir_scale_factor (float): Scale factor for the impulse response.
+        """
         self.rir_files = rir_files
         self.sample_rate = sample_rate
         self.rir_scale_factor = rir_scale_factor
@@ -222,10 +258,17 @@ class TimeStretch(AudioTransform):
     - If rate > 1, then the signal is sped up (shorter).
     - If rate < 1, then the signal is slowed down (longer).
     """
-
     supports_multichannel = True
 
     def __init__(self, min_rate: float = 0.8, max_rate: float = 1.25, leave_length_unchanged: bool = True):
+        """
+        Initialize TimeStretch.
+
+        Parameters:
+            min_rate (float): Minimum stretch rate.
+            max_rate (float): Maximum stretch rate.
+            leave_length_unchanged (bool): If True, the output length is adjusted to match the original.
+        """
         assert min_rate >= 0.1, ValueError("`min_rate` must be greater than 0.1")
         assert max_rate <= 10, ValueError("`max_rate` must be smaller than 10")
         assert min_rate <= max_rate, ValueError("`min_rate` must be smaller than `max_rate`")
@@ -256,11 +299,20 @@ class TimeStretch(AudioTransform):
 
 
 class PitchShift(AudioTransform):
-    """Pitch shift the sound up or down without changing the tempo"""
-
+    """
+    Pitch shift the sound up or down without changing the tempo.
+    """
     supports_multichannel = True
 
     def __init__(self, sample_rate: int = 16000, min_semitones: float = -4.0, max_semitones: float = 4.0):
+        """
+        Initialize PitchShift.
+
+        Parameters:
+            sample_rate (int): Sampling rate of the audio.
+            min_semitones (float): Minimum semitones to shift.
+            max_semitones (float): Maximum semitones to shift.
+        """
         assert min_semitones >= -12, ValueError("`min_semitones` must be greater than -12")
         assert max_semitones <= 12, ValueError("`max_semitones` must be smaller than 12")
         assert min_semitones <= max_semitones, ValueError("`max_semitones` must be greater than `min_semitones`")
@@ -289,11 +341,19 @@ class PolarityInversion(AudioTransform):
 
 
 class RandomGain(AudioTransform):
-    """Multiply the audio by a random amplitude factor to reduce or increase the volume"""
-
+    """
+    Multiply the audio by a random amplitude factor to adjust the volume.
+    """
     supports_multichannel = True
 
-    def __init__(self, min_gain_db: float = None, max_gain_db: float = None,):
+    def __init__(self, min_gain_db: float = None, max_gain_db: float = None):
+        """
+        Initialize RandomGain.
+
+        Parameters:
+            min_gain_db (float): Minimum gain in decibels.
+            max_gain_db (float): Maximum gain in decibels.
+        """
         self.min_gain_db = min_gain_db
         self.max_gain_db = max_gain_db
 
@@ -315,10 +375,19 @@ class RandomGain(AudioTransform):
 
 
 class BitCrush(AudioTransform):
-
+    """
+    Reduce the bit depth of the audio, creating a bit-crushed effect.
+    """
     supports_multichannel = True
 
     def __init__(self, min_bit_depth: int = 5, max_bit_depth: int = 10):
+        """
+        Initialize BitCrush.
+
+        Parameters:
+            min_bit_depth (int): Minimum bit depth.
+            max_bit_depth (int): Maximum bit depth.
+        """
         self.min_bit_depth = min_bit_depth
         self.max_bit_depth = max_bit_depth
         assert min_bit_depth >= 1, ValueError("`min_bit_depth` must be at least 1.")
@@ -334,7 +403,9 @@ class BitCrush(AudioTransform):
 
 
 class ClippingDistortion(AudioTransform):
-
+    """
+    Apply clipping distortion by clipping the audio signal based on a percentile threshold.
+    """
     supports_multichannel = True
 
     def __init__(
@@ -342,6 +413,13 @@ class ClippingDistortion(AudioTransform):
         min_percentile_threshold: int = 0,
         max_percentile_threshold: int = 40,
     ):
+        """
+        Initialize ClippingDistortion.
+
+        Parameters:
+            min_percentile_threshold (int): Minimum percentile threshold.
+            max_percentile_threshold (int): Maximum percentile threshold.
+        """
         self.min_percentile_threshold = min_percentile_threshold
         self.max_percentile_threshold = max_percentile_threshold
         assert min_percentile_threshold <= max_percentile_threshold
@@ -362,7 +440,9 @@ class ClippingDistortion(AudioTransform):
 
 
 class Reverb(AudioTransform):
-
+    """
+    Apply reverberation effect to audio data using WavAugment.
+    """
     supports_multichannel = True
 
     def __init__(
@@ -375,6 +455,18 @@ class Reverb(AudioTransform):
         room_size_min: int = 0, 
         room_size_max: int = 100, 
     ):
+        """
+        Initialize Reverb.
+
+        Parameters:
+            sample_rate (int): Sampling rate of the audio.
+            reverberance_min (int): Minimum reverberance percentage.
+            reverberance_max (int): Maximum reverberance percentage.
+            dumping_factor_min (int): Minimum dumping factor percentage.
+            dumping_factor_max (int): Maximum dumping factor percentage.
+            room_size_min (int): Minimum room size percentage.
+            room_size_max (int): Maximum room size percentage.
+        """
         self.sample_rate = sample_rate
         self.reverberance_min = reverberance_min
         self.reverberance_max = reverberance_max
@@ -413,12 +505,21 @@ class Reverb(AudioTransform):
 
 
 class TanhDistortion(AudioTransform):
-
+    """
+    Apply hyperbolic tangent distortion to the audio signal.
+    """
     supports_multichannel = True
 
     def __init__(
         self, min_distortion: float = 0.01, max_distortion: float = 0.7
     ):
+        """
+        Initialize TanhDistortion.
+
+        Parameters:
+            min_distortion (float): Minimum distortion amount.
+            max_distortion (float): Maximum distortion amount.
+        """
         assert 0 <= min_distortion <= 1
         assert 0 <= max_distortion <= 1
         assert min_distortion <= max_distortion
@@ -446,6 +547,375 @@ class TanhDistortion(AudioTransform):
             post_gain = rms_before / rms_after
             aug_signal = post_gain * aug_signal
         return aug_signal
+
+
+class EchoEffect(AudioTransform):
+    """
+    Apply an echo effect by mixing a delayed version of the audio with the original.
+    """
+    supports_multichannel = True
+
+    def __init__(self, delay: float = 0.3, decay: float = 0.5, sample_rate: int = 16000):
+        """
+        Initialize EchoEffect.
+
+        Parameters:
+            delay (float): Delay in seconds before the echo starts.
+            decay (float): Decay factor applied to the echo.
+            sample_rate (int): Sampling rate of the audio.
+        """
+        self.delay = delay
+        self.decay = decay
+        self.sample_rate = sample_rate
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply the echo effect to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Audio data with echo effect applied.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        delay_samples = int(self.delay * self.sample_rate)
+        echo = np.zeros_like(audio_data)
+        if audio_data.shape[1] > delay_samples:
+            echo[:, delay_samples:] = audio_data[:, :-delay_samples] * self.decay
+        return audio_data + echo
+
+
+class LowPassFilter(AudioTransform):
+    """
+    Apply a low-pass filter to remove high-frequency content from the audio signal.
+    """
+    supports_multichannel = True
+
+    def __init__(self, cutoff_freq: float = 4000, sample_rate: int = 16000, order: int = 5):
+        """
+        Initialize LowPassFilter.
+
+        Parameters:
+            cutoff_freq (float): Cutoff frequency in Hz.
+            sample_rate (int): Sampling rate of the audio.
+            order (int): Order of the Butterworth filter.
+        """
+        self.cutoff_freq = cutoff_freq
+        self.sample_rate = sample_rate
+        self.order = order
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply low-pass filtering to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Low-pass filtered audio data.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        nyq = 0.5 * self.sample_rate
+        normal_cutoff = self.cutoff_freq / nyq
+        b, a = scipy.signal.butter(self.order, normal_cutoff, btype='low', analog=False)
+        filtered = scipy.signal.filtfilt(b, a, audio_data, axis=1)
+        return filtered
+
+
+class HighPassFilter(AudioTransform):
+    """
+    Apply a high-pass filter to remove low-frequency content from the audio signal.
+    """
+    supports_multichannel = True
+
+    def __init__(self, cutoff_freq: float = 300, sample_rate: int = 16000, order: int = 5):
+        """
+        Initialize HighPassFilter.
+
+        Parameters:
+            cutoff_freq (float): Cutoff frequency in Hz.
+            sample_rate (int): Sampling rate of the audio.
+            order (int): Order of the Butterworth filter.
+        """
+        self.cutoff_freq = cutoff_freq
+        self.sample_rate = sample_rate
+        self.order = order
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply high-pass filtering to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: High-pass filtered audio data.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        nyq = 0.5 * self.sample_rate
+        normal_cutoff = self.cutoff_freq / nyq
+        b, a = scipy.signal.butter(self.order, normal_cutoff, btype='high', analog=False)
+        filtered = scipy.signal.filtfilt(b, a, audio_data, axis=1)
+        return filtered
+
+
+class BandPassFilter(AudioTransform):
+    """
+    Apply a band-pass filter to isolate a specific frequency band from the audio signal.
+    """
+    supports_multichannel = True
+
+    def __init__(self, low_cutoff: float = 300, high_cutoff: float = 3400, sample_rate: int = 16000, order: int = 4):
+        """
+        Initialize BandPassFilter.
+
+        Parameters:
+            low_cutoff (float): Lower cutoff frequency in Hz.
+            high_cutoff (float): Upper cutoff frequency in Hz.
+            sample_rate (int): Sampling rate of the audio.
+            order (int): Order of the Butterworth filter.
+        """
+        self.low_cutoff = low_cutoff
+        self.high_cutoff = high_cutoff
+        self.sample_rate = sample_rate
+        self.order = order
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply band-pass filtering to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Band-pass filtered audio data.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        nyq = 0.5 * self.sample_rate
+        low = self.low_cutoff / nyq
+        high = self.high_cutoff / nyq
+        b, a = scipy.signal.butter(self.order, [low, high], btype='band')
+        filtered = scipy.signal.filtfilt(b, a, audio_data, axis=1)
+        return filtered
+
+
+class ReverseAudio(AudioTransform):
+    """
+    Reverse the audio signal in time.
+    """
+    supports_multichannel = True
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Reverse the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Time-reversed audio data.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        return audio_data[:, ::-1]
+
+
+class DynamicRangeCompression(AudioTransform):
+    """
+    Apply dynamic range compression to reduce the difference between loud and soft parts of the audio.
+    """
+    supports_multichannel = True
+
+    def __init__(self, threshold: float = 0.5, ratio: float = 4.0):
+        """
+        Initialize DynamicRangeCompression.
+
+        Parameters:
+            threshold (float): Amplitude threshold above which compression is applied.
+            ratio (float): Compression ratio.
+        """
+        self.threshold = threshold
+        self.ratio = ratio
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Compress the dynamic range of the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Audio data after dynamic range compression.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        abs_audio = np.abs(audio_data)
+        mask = abs_audio > self.threshold
+        compressed = np.copy(audio_data)
+        compressed[mask] = np.sign(audio_data[mask]) * (
+            self.threshold + (abs_audio[mask] - self.threshold) / self.ratio
+        )
+        return compressed
+
+
+class Equalizer(AudioTransform):
+    """
+    Apply a simple equalizer by boosting or attenuating specified frequency bands.
+    """
+    supports_multichannel = True
+
+    def __init__(self, gains: dict, sample_rate: int = 16000):
+        """
+        Initialize Equalizer.
+
+        Parameters:
+            gains (dict): Dictionary with center frequencies (Hz) as keys and gain factors as values.
+            sample_rate (int): Sampling rate of the audio.
+        """
+        self.gains = gains
+        self.sample_rate = sample_rate
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply equalization to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Equalized audio data.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        equalized = np.zeros_like(audio_data)
+        for freq, gain in self.gains.items():
+            low = max(freq - 50, 0)
+            high = freq + 50
+            nyq = 0.5 * self.sample_rate
+            low_norm = low / nyq
+            high_norm = high / nyq
+            b, a = scipy.signal.butter(2, [low_norm, high_norm], btype='band')
+            filtered = scipy.signal.filtfilt(b, a, audio_data, axis=1)
+            equalized += gain * filtered
+        return audio_data + equalized
+
+
+class Flanger(AudioTransform):
+    """
+    Apply a flanger effect by mixing a time-varying delayed copy of the audio with the original.
+    """
+    supports_multichannel = True
+
+    def __init__(self, max_delay: float = 0.005, depth: float = 0.002, rate: float = 0.25, sample_rate: int = 16000):
+        """
+        Initialize Flanger.
+
+        Parameters:
+            max_delay (float): Maximum delay in seconds.
+            depth (float): Depth of modulation.
+            rate (float): Modulation rate in Hz.
+            sample_rate (int): Sampling rate of the audio.
+        """
+        self.max_delay = max_delay
+        self.depth = depth
+        self.rate = rate
+        self.sample_rate = sample_rate
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply the flanger effect to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Audio data with the flanger effect applied.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        num_samples = audio_data.shape[1]
+        t = np.arange(num_samples) / self.sample_rate
+        mod = self.depth * np.sin(2 * np.pi * self.rate * t)
+        delay_samples = (self.max_delay * self.sample_rate * (1 + mod)).astype(int)
+        flanged = np.copy(audio_data)
+        for n in range(num_samples):
+            d = delay_samples[n]
+            if n - d >= 0:
+                flanged[:, n] = audio_data[:, n] + audio_data[:, n - d]
+        return flanged
+
+
+class Chorus(AudioTransform):
+    """
+    Apply a chorus effect by mixing several delayed copies of the audio signal.
+    """
+    supports_multichannel = True
+
+    def __init__(self, delays: list = [0.02, 0.025, 0.03], decays: list = [0.5, 0.5, 0.5], sample_rate: int = 16000):
+        """
+        Initialize Chorus.
+
+        Parameters:
+            delays (list): List of delay times in seconds.
+            decays (list): List of decay factors corresponding to each delay.
+            sample_rate (int): Sampling rate of the audio.
+        """
+        self.delays = delays
+        self.decays = decays
+        self.sample_rate = sample_rate
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply the chorus effect to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Audio data with the chorus effect applied.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        chorus_signal = np.copy(audio_data)
+        for delay, decay in zip(self.delays, self.decays):
+            delay_samples = int(delay * self.sample_rate)
+            temp = np.zeros_like(audio_data)
+            if audio_data.shape[1] > delay_samples:
+                temp[:, delay_samples:] = audio_data[:, :-delay_samples] * decay
+            chorus_signal += temp
+        return chorus_signal
+
+
+class Tremolo(AudioTransform):
+    """
+    Apply a tremolo effect by modulating the amplitude of the audio signal.
+    """
+    supports_multichannel = True
+
+    def __init__(self, rate: float = 5.0, depth: float = 0.5, sample_rate: int = 16000):
+        """
+        Initialize Tremolo.
+
+        Parameters:
+            rate (float): Modulation rate in Hz.
+            depth (float): Modulation depth (range 0 to 1).
+            sample_rate (int): Sampling rate of the audio.
+        """
+        self.rate = rate
+        self.depth = depth
+        self.sample_rate = sample_rate
+
+    def __call__(self, audio_data: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+        """
+        Apply the tremolo effect to the audio data.
+
+        Parameters:
+            audio_data (ndarray or Tensor): Input audio data.
+        
+        Returns:
+            ndarray: Audio data with tremolo effect applied.
+        """
+        audio_data = reshape_audio_clip(audio_data)
+        num_samples = audio_data.shape[1]
+        t = np.linspace(0, num_samples / self.sample_rate, num_samples)
+        modulation = (1 + self.depth * np.sin(2 * np.pi * self.rate * t)) / 2
+        return audio_data * modulation
 
 
 class FBank(AudioTransform):
